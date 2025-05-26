@@ -3,49 +3,29 @@ import requests
 
 MQTT_BROKER = "broker.emqx.io"
 MQTT_TOPIC = "dnscheck/lgu"
-
-WARNING_KEYWORDS = [
-    "불법", "유해", "경고", "접속할 수 없습니다", "서비스 이용이 제한", "위반", "차단",
-    "위해 정보", "유해 정보", "유해사이트", "청소년 유해", "불법 사이트"
-]
-REDIRECT_KEYWORDS = ["warning.or.kr", "harmful.or.kr", "w.nprotect.net", "safevisit"]
-
-def is_blocked(content, final_url):
-    for keyword in WARNING_KEYWORDS:
-        if keyword in content:
-            return f"차단(https warning keyword)"
-    for redirect in REDIRECT_KEYWORDS:
-        if redirect in final_url:
-            return f"차단(https warning redirect)"
-    return None
-
-def check_single(domain):
-    for protocol in ["https", "http"]:
-        try:
-            url = f"{protocol}://{domain}"
-            res = requests.get(url, timeout=10, allow_redirects=True)
-            content = res.text[:3000]
-            redirect_url = res.url
-
-            blocked = is_blocked(content, redirect_url)
-            if blocked:
-                return blocked.replace("https", protocol)
-            return "정상" if protocol == "https" else "정상(http)"
-        except:
-            continue
-    return "응답없음"
+POST_URL = "https://brodbot-gyunle025.replit.app/mobile-report"
+MY_ISP = "LGU+"
 
 def on_connect(client, userdata, flags, rc):
-    print("📡 MQTT 연결됨 (LGU+)")
+    print(f"[{MY_ISP}] MQTT 연결됨")
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
-    domain = msg.payload.decode().strip().replace("https://", "").replace("http://", "")
-    if "." not in domain or " " in domain:
-        print(f"⛔ 무시됨 (도메인 아님): {domain}")
-        return
-    result = check_single(domain)
-    print(f"✅ 모바일버전 결과: {domain}\n- LGU+: {result}")
+    domain = msg.payload.decode().strip()
+    print(f"[{MY_ISP}] 검사 요청 도메인: {domain}")
+
+    try:
+        res = requests.get(f"http://210.126.12.123:5000/check?domain={domain}", timeout=20)
+        result = res.json().get("result", {}).get(MY_ISP, "응답없음")
+        requests.post(POST_URL, json={
+            "domain": domain,
+            "isp": MY_ISP,
+            "result": result
+        })
+        print(f"[{MY_ISP}] 결과 전송됨: {result}")
+
+    except Exception as e:
+        print(f"[{MY_ISP}] 오류: {e}")
 
 client = mqtt.Client()
 client.on_connect = on_connect
