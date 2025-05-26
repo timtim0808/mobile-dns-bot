@@ -1,31 +1,31 @@
-import os
 import paho.mqtt.client as mqtt
+import requests
 import time
-import datetime
-import subprocess
 
 MQTT_BROKER = "broker.emqx.io"
 MQTT_TOPIC = "dnscheck/kt"
 
+def check_domain(domain):
+    try:
+        print(f"[🔍] 검사 중: {domain}")
+        res = requests.get(f"http://210.126.12.123:5000/check?domain={domain}", timeout=20)
+        data = res.json()
+        result = data.get("result", {})
+        print(f"✅ 모바일(KT) 결과: {domain}")
+        print(f"- KT: {result.get('KT', '응답없음')}")
+    except Exception as e:
+        print(f"❌ 검사 실패: {e}")
+
 def on_connect(client, userdata, flags, rc):
-    print("Connected with result code", rc)
+    print("✅ MQTT 연결됨")
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
-    try:
-        domain = msg.payload.decode().strip()
-        print(f"[RECEIVED] Domain to open: {domain}")
-
-        os.system(f"termux-open-url http://{domain}")
-        time.sleep(5)
-
-        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"/sdcard/kt_{domain}_{now}.png"
-        subprocess.run(["termux-screenshot", "-f", filename])
-        print(f"[✅] Screenshot saved: {filename}")
-
-    except Exception as e:
-        print(f"[❌ ERROR] {e}")
+    domain = msg.payload.decode().strip()
+    if "." not in domain:
+        print(f"⛔ 무시됨 (도메인 아님): {domain}")
+        return
+    check_domain(domain)
 
 client = mqtt.Client()
 client.on_connect = on_connect
