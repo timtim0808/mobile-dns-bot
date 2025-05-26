@@ -31,7 +31,7 @@ def check_domain(domain):
         else:
             final = classify("http")
 
-        print(f"[KT ✅] {domain} = {final}")
+        print(f"[SKT ✅] {domain} = {final}")
         requests.post(REPORT_URL, json={"domain": domain, "isp": "SKT", "status": final})
 
     except Exception as e:
