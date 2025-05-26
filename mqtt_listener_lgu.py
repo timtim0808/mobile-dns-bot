@@ -1,49 +1,57 @@
+# mqtt_listener_LGU.py / mqtt_listener_sLGU.py / mqtt_listener_lgu.py
+# carrier 이름만 각각 LGU, SLGU, LGU+ 로 바꿔서 저장하세요
+
 import paho.mqtt.client as mqtt
 import requests
-import time
 import http.client
 
 MQTT_BROKER = "broker.emqx.io"
-MQTT_TOPIC = "dnscheck/lgu"
+MQTT_TOPIC = "dnscheck/LGU"  # ✅ LGU/SLGU/LGU+ 에 따라 "dnscheck/sLGU", "dnscheck/lgu" 로 변경
+CARRIER = "LGU"  # ✅ 해당 파일에 맞게 "SLGU" 또는 "LGU+"로 변경
 REPORT_URL = "https://brodbot-gyunle025.replit.app/mobile-report"
 
-def check_domain(domain):
+def classify(domain, protocol):
     try:
-        def classify(protocol):
-            try:
-                conn = http.client.HTTPSConnection(domain, timeout=10) if protocol == "https" else http.client.HTTPConnection(domain, timeout=10)
-                conn.request("GET", "/")
-                res = conn.getresponse()
-                html = res.read().decode(errors="ignore")
-                location = res.getheader("Location", "")
+        conn = http.client.HTTPSConnection(domain, timeout=10) if protocol == "https" else http.client.HTTPConnection(domain, timeout=10)
+        conn.request("GET", "/")
+        res = conn.getresponse()
+        html = res.read().decode(errors="ignore")
+        location = res.getheader("Location", "")
 
-                if any(w in html for w in ["불법", "유해", "경고", "watch", "harmful"]) or "warning" in location:
-                    return f"차단({protocol} warning redirect)"
-                return f"정상({protocol})"
-            except Exception:
-                return "응답없음"
+        if any(w in html for w in ["불법", "유해", "경고", "harmful", "watch"]) or "warning" in location:
+            return f"차단({protocol} warning redirect)"
+        return f"정상({protocol})"
+    except:
+        return "응답없음"
 
-        https_result = classify("https")
-        if "정상" in https_result:
-            final = https_result
-        elif "차단" in https_result:
-            final = https_result
-        else:
-            final = classify("http")
+def check_domain(domain):
+    print(f"[{CARRIER}] 검사 시작: {domain}")
+    https_result = classify(domain, "https")
+    if "정상" in https_result:
+        final = https_result
+    elif "차단" in https_result:
+        final = https_result
+    else:
+        final = classify(domain, "http")
 
-        print(f"[LGU ✅] {domain} = {final}")
-        requests.post(REPORT_URL, json={"domain": domain, "isp": "LGU", "status": final})
-
+    print(f"[{CARRIER}] 결과 전송됨: {final}")
+    try:
+        requests.post(REPORT_URL, json={
+            "domain": domain,
+            "isp": CARRIER,
+            "result": final
+        }, timeout=10)
     except Exception as e:
-        print("[❌] 검사 오류", e)
+        print(f"[❌ {CARRIER}] 전송 실패: {e}")
 
 def on_connect(client, userdata, flags, rc):
-    print("📶 MQTT 연결됨 (LGU)")
+    print(f"✅ MQTT 연결됨: {CARRIER}")
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
     domain = msg.payload.decode().strip()
     if "." not in domain:
+        print(f"[⛔ 무시됨] {domain}")
         return
     check_domain(domain)
 
